@@ -138,9 +138,8 @@ def main():
             with col_post1:
                 if st.button("📤 Postar no Telegram"):
                     try:
-                        # Puxa as configurações dos Secrets do Streamlit
-                        token = st.secrets["8674080576:AAGZ2uVLASyKvnd51QpfYyhvMpzh6MLLgAI"]
-                        chat_id = st.secrets["@tomdaspromo"]
+                        token = st.secrets["TELEGRAM_TOKEN"]
+                        chat_id = st.secrets["TELEGRAM_CHAT_ID"]
                         
                         url_api = f"https://api.telegram.org/bot{token}/sendMessage"
                         payload = {"chat_id": chat_id, "text": post_final}
@@ -149,9 +148,9 @@ def main():
                         if response.status_code == 200:
                             st.success("✅ Enviado com sucesso para o Telegram!")
                         else:
-                            st.error(f"Erro no Telegram: {response.text}")
+                            st.error(f"Erro: {response.json().get('description')}")
                     except Exception as e:
-                        st.error("Configure o TELEGRAM_TOKEN e TELEGRAM_CHAT_ID nos Secrets.")
+                        st.error("Erro técnico: Verifique se os Secrets estão preenchidos no Streamlit Cloud.")
             
             with col_post2:
                 if st.button("💬 Abrir no WhatsApp"):
