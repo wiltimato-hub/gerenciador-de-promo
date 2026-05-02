@@ -4,116 +4,106 @@ import requests
 from bs4 import BeautifulSoup
 import urllib.parse
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Postador de Ofertas Pro", page_icon="💰", layout="centered")
+# --- CONFIGURAÇÃO ---
+st.set_page_config(page_title="Postador Pro", page_icon="💰")
 
-# Inicialização de variáveis de memória (Session State)
 if "logado" not in st.session_state: st.session_state.logado = False
 if "texto_gerado" not in st.session_state: st.session_state.texto_gerado = ""
 if "img_url" not in st.session_state: st.session_state.img_url = ""
 
-# --- BANCO DE DADOS DE USUÁRIOS ---
+# --- LOGIN ---
 USUARIOS = {"WilliamP": "William08112006!", "WesleyB": "festa456", "PedroA": "oferta789"}
 
-# --- INTERFACE DE LOGIN ---
 if not st.session_state.logado:
-    st.title("🔐 Acesso Restrito")
+    st.title("🔐 Login")
     u = st.text_input("Usuário")
     p = st.text_input("Senha", type="password")
     if st.button("Entrar"):
         if u in USUARIOS and USUARIOS[u] == p:
             st.session_state.logado = True
             st.rerun()
-        else:
-            st.error("Usuário ou senha incorretos.")
-
-# --- ÁREA DO GERADOR (SÓ APARECE LOGADO) ---
+        else: st.error("Incorreto")
 else:
-    st.title("💰 Gerador de Promoções")
-    
-    with st.container():
-        url_input = st.text_input("🔗 Link do Produto:", placeholder="Cole o link da Amazon, Magalu, etc.")
-        
-        col_loja, col_img = st.columns(2)
-        with col_loja:
-            loja_sel = st.selectbox("🏪 Loja:", ["Amazon", "Magalu", "Shopee", "Mercado Livre", "Outra"])
-        with col_img:
-            img_manual = st.text_input("🖼️ URL da Imagem (Opcional):", placeholder="Caso a automação falhe")
-        
-        detalhes = st.text_area("📝 Informações Extras:", placeholder="Ex: De R$ 500 por R$ 299 em 10x sem juros")
-        
-        btn_gerar = st.button("✨ GERAR PROMOÇÃO AGORA")
+    st.title("💰 Gerador de Ofertas Profissional")
 
-    # --- LÓGICA DE GERAÇÃO ---
-    if btn_gerar:
+    # --- INPUTS ---
+    url_input = st.text_input("🔗 Link do Produto (Original):")
+    loja_sel = st.selectbox("🏪 Loja:", ["Amazon", "Magalu", "Shopee", "Outra"])
+    detalhes = st.text_area("📝 Detalhes da Oferta (Preço/Nome):")
+    img_manual = st.text_input("🖼️ URL da Imagem (Opcional):")
+
+    if st.button("✨ GERAR PROMOÇÃO"):
         if not url_input:
-            st.warning("Por favor, insira o link do produto.")
+            st.warning("Insira o link!")
         else:
             with st.spinner("Processando..."):
-                # 1. Tentar capturar imagem automaticamente
+                # 1. TENTAR CAPTURAR IMAGEM
                 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                 try:
                     res = requests.get(url_input, headers=headers, timeout=10)
                     soup = BeautifulSoup(res.text, 'html.parser')
-                    img_tag = soup.find("meta", property="og:image") or soup.find("meta", {"name": "twitter:image"})
-                    st.session_state.img_url = img_tag["content"] if img_tag else img_manual
+                    img = soup.find("meta", property="og:image")
+                    st.session_state.img_url = img["content"] if img else img_manual
                 except:
                     st.session_state.img_url = img_manual
 
-                # 2. Gerar Texto com IA
+                # 2. CONFIGURAR LINK DE AFILIADO (Correção do Link)
+                tag_amazon = st.secrets.get("AMAZON_TAG", "wiltimato-20")
+                if "Amazon" in loja_sel:
+                    # Se o link já tem ?, usa &, senão usa ?
+                    separador = "&" if "?" in url_input else "?"
+                    link_final = f"{url_input}{separador}tag={tag_amazon}"
+                else:
+                    link_final = url_input
+
+                # 3. CHAMAR IA (Modelo Flash - Mais estável)
                 try:
                     genai.configure(api_key=st.secrets["GEMINI_KEY"])
+                    # Mudança para o modelo estável mais recente
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    link_afiliado = url_input
-                    link_afiliado = url_input
-                    if "Amazon" in loja_sel:
-                        tag = st.secrets.get("AMAZON_TAG", "wiltimato-20") # Puxa do Secret
-                        link_afiliado = f"{url_input}&tag={tag}" if "?" in url_input else f"{url_input}?tag={tag}"
-                                        
-                    prompt = f"Crie um post de oferta curto para WhatsApp/Telegram. Produto: {url_input}. Detalhes: {detalhes}. Use emojis, negrito e termine com: 🛒 Compre aqui: {link_afiliado}"
-                    
+                    # Prompt focado em colocar o link no topo (melhor para o preview do WhatsApp)
+                    prompt = f"""
+                    Crie um post de oferta impactante. 
+                    Produto: {url_input}
+                    Detalhes: {detalhes}
+                    REQUISITOS:
+                    - Comece com emojis chamativos.
+                    - Coloque o link de compra logo no início ou meio: {link_final}
+                    - Use negrito para o preço.
+                    - Seja breve.
+                    """
                     response = model.generate_content(prompt)
                     st.session_state.texto_gerado = response.text
-                    st.success("✅ Texto gerado com sucesso!")
+                    st.success("✅ IA e Link gerados!")
                 except Exception as e:
                     st.error(f"Erro na IA: {e}")
-                    st.session_state.texto_gerado = f"🔥 *PROMOÇÃO EXCLUSIVA*\n\n{detalhes}\n\n🛒 Compre aqui: {url_input}"
+                    st.session_state.texto_gerado = f"🔥 *OFERTA CONFIRMADA!*\n\n{detalhes}\n\n🛒 COMPRE AQUI: {link_final}"
 
-    # --- RESULTADO E ENVIO ---
+    # --- ÁREA DE ENVIO ---
     if st.session_state.texto_gerado:
         st.divider()
-        st.subheader("📝 Resultado Final")
-        
         if st.session_state.img_url:
             st.image(st.session_state.img_url, width=300)
-            st.caption("Prévia da imagem capturada")
         
-        post_final = st.text_area("Edite o texto se necessário:", value=st.session_state.texto_gerado, height=250)
+        post_final = st.text_area("Texto para copiar/enviar:", value=st.session_state.texto_gerado, height=250)
 
-        col_tel, col_zap = st.columns(2)
-        
-        with col_tel:
+        c1, c2 = st.columns(2)
+        with c1:
             if st.button("📤 Postar no Telegram"):
                 try:
                     t = st.secrets["TELEGRAM_TOKEN"]
                     c = st.secrets["TELEGRAM_CHAT_ID"]
-                    
                     if st.session_state.img_url:
-                        # Envia FOTO com legenda (HTML ativado para negritos)
-                        api_url = f"https://api.telegram.org/bot{t}/sendPhoto"
-                        payload = {"chat_id": c, "photo": st.session_state.img_url, "caption": post_final, "parse_mode": "Markdown"}
+                        requests.post(f"https://api.telegram.org/bot{t}/sendPhoto", 
+                                     data={"chat_id": c, "photo": st.session_state.img_url, "caption": post_final, "parse_mode": "Markdown"})
                     else:
-                        # Envia só TEXTO
-                        api_url = f"https://api.telegram.org/bot{t}/sendMessage"
-                        payload = {"chat_id": c, "text": post_final, "parse_mode": "Markdown"}
-                    
-                    res = requests.post(api_url, data=payload)
-                    if res.status_code == 200: st.success("✅ Enviado!")
-                    else: st.error(f"Erro: {res.json().get('description')}")
-                except:
-                    st.error("Verifique os Tokens do Telegram nos Secrets.")
-
-        with col_zap:
-            texto_enc = urllib.parse.quote(post_final)
-            st.link_button("💬 Enviar para WhatsApp", f"https://api.whatsapp.com/send?text={texto_enc}")
+                        requests.post(f"https://api.telegram.org/bot{t}/sendMessage", 
+                                     data={"chat_id": c, "text": post_final, "parse_mode": "Markdown"})
+                    st.success("Enviado para o Telegram!")
+                except: st.error("Erro no Telegram.")
+        
+        with c2:
+            # WhatsApp: O link vai no texto. Ao enviar, o WhatsApp lê o link e puxa a imagem.
+            texto_whatsapp = urllib.parse.quote(post_final)
+            st.link_button("💬 Abrir WhatsApp", f"https://api.whatsapp.com/send?text={texto_whatsapp}")
