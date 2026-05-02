@@ -1,165 +1,124 @@
 import streamlit as st
 import google.generativeai as genai
-import re
 import requests
-import urllib.parse 
+from bs4 import BeautifulSoup
+import urllib.parse
 
-# --- CONFIGURAÇÕES INICIAIS ---
+# --- CONFIGURAÇÕES ---
 st.set_page_config(page_title="Gerador de Ofertas IA", page_icon="💰")
 
-# Configuração da IA (A chave deve ser colocada nos Secrets do Streamlit ou .env)
-# Para testes locais, você pode substituir por st.secrets["GEMINI_KEY"]
+# Configuração da IA
 try:
     genai.configure(api_key=st.secrets["GEMINI_KEY"])
     model = genai.GenerativeModel('gemini-pro')
 except:
-    st.error("Erro: Chave da API do Gemini não configurada.")
+    st.error("Erro: Verifique a GEMINI_KEY nos Secrets.")
 
-# --- BANCO DE DADOS DE USUÁRIOS ---
 USUARIOS = {
     "WilliamP": "1",
     "WesleyB": "festa456",
     "PedroA": "oferta789"
 }
 
-# --- FUNÇÕES DE LÓGICA ---
-
-def criar_link_afiliado(url_original, loja):
-    """
-    Transforma o link comum em link de afiliado conforme a loja selecionada.
-    """
-    link = url_original.strip()
-    if "Amazon" in loja:
-        tag = "wiltimato-20" # Substitua pelo seu ID
-        return f"{link}&tag={tag}" if "?" in link else f"{link}?tag={tag}"
-    
-    elif "Magalu" in loja:
-        # Exemplo de link de divulgador Magalu
-        id_magalu = "seu_user_magalu"
-        return f"https://www.magazinevoce.com.br/magazine{id_magalu}/p/{link.split('/')[-1]}"
-    
-    elif "Shopee" in loja:
-        # Links da Shopee geralmente exigem a API para converter, 
-        # aqui mantemos o original ou adicionamos um parâmetro simples
-        return f"{link}?smtt=0.0.9"
+# --- FUNÇÃO PARA PEGAR IMAGEM AUTOMATICAMENTE ---
+def extrair_dados_produto(url):
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"}
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'lxml')
         
+        # Tenta pegar a imagem das meta tags (padrão da maioria das lojas)
+        img_tag = soup.find("meta", property="og:image") or soup.find("meta", {"name": "twitter:image"})
+        if img_tag:
+            return img_tag["content"]
+        
+        # Fallback para Amazon (procura a imagem principal)
+        img_amazon = soup.find("img", {"id": "landingImage"}) or soup.find("img", {"id": "imgBlkFront"})
+        if img_amazon:
+            return img_amazon["src"]
+            
+        return None
+    except:
+        return None
+
+def criar_link_afiliado(url, loja):
+    link = url.strip()
+    if "Amazon" in loja:
+        tag = "wiltimato-20"
+        return f"{link}&tag={tag}" if "?" in link else f"{link}?tag={tag}"
+    elif "Magalu" in loja:
+        return f"https://www.magazinevoce.com.br/magazinewiltimato/p/{link.split('/')[-1]}"
     return link
 
-def gerar_texto_ia(url, loja, texto_manual=""):
-    """
-    Solicita à IA a criação de uma copy de vendas.
-    """
-    prompt = f"""
-    Crie um post de oferta elegate:
-    1. Nome do produto em NEGRITO
-    2. Uma linha com o beneficio principal
-    3. Preço em destaque com emoji de dinheiro
-    4. link de compra claro
-    Evite parágrafos longos. Use listas (.)
-    
-    
-    Produto/Link: {url}
-    Loja: {loja}
-    Informações Adicionais: {texto_manual}
-    
-    REQUISITOS:
-    1. Use emojis para chamar atenção.
-    2. Use gatilhos de urgência (ex: 'Menor preço do ano', 'Corre que acaba').
-    3. Coloque o preço em destaque.
-    4. Deixe o local [LINK] para eu inserir depois.
-    5. Não seja formal demais.
-    """
+def gerar_texto_ia(url, loja, info):
+    prompt = f"Crie um post de oferta para o produto no link {url}. Loja: {loja}. Info extra: {info}. Use negrito no título, emojis e uma lista de benefícios. Use o marcador [LINK] no final."
     try:
         response = model.generate_content(prompt)
         return response.text
-    except Exception as e:
+    except:
         return None
 
-# --- INTERFACE DO SITE ---
+# --- INTERFACE ---
+if "logado" not in st.session_state: st.session_state.logado = False
+if "texto_final" not in st.session_state: st.session_state.texto_final = ""
+if "img_url" not in st.session_state: st.session_state.img_url = ""
 
-def main():
-    # Inicialização do estado de login
-    if "logado" not in st.session_state:
-        st.session_state.logado = False
-
-    if not st.session_state.logado:
-        # TELA DE LOGIN
-        st.title("🔐 Acesso Privado")
-        user = st.text_input("Usuário")
-        senha = st.text_input("Senha", type="password")
-        if st.button("Entrar"):
-            if user in USUARIOS and USUARIOS[user] == senha:
-                st.session_state.logado = True
-                st.rerun()
-            else:
-                st.error("Credenciais inválidas.")
-    else:
-        # TELA PRINCIPAL
-        st.sidebar.title(f"Bem-vindo!")
-        if st.sidebar.button("Sair"):
-            st.session_state.logado = False
+if not st.session_state.logado:
+    st.title("🔐 Login")
+    u = st.text_input("Usuário")
+    p = st.text_input("Senha", type="password")
+    if st.button("Entrar"):
+        if u in USUARIOS and USUARIOS[u] == p:
+            st.session_state.logado = True
             st.rerun()
+else:
+    st.title("💰 Postador Inteligente")
+    
+    url_input = st.text_input("Link do Produto:")
+    loja = st.selectbox("Loja:", ["Amazon", "Magalu", "Shopee", "Outra"])
+    info = st.text_area("Preço e Detalhes:")
 
-        st.title("💰 Gerador de Ofertas Automático")
-        st.info("Preencha os dados abaixo para postar nos grupos.")
+    if st.button("✨ GERAR OFERTA COMPLETA"):
+        if url_input:
+            with st.spinner("Buscando imagem e criando texto..."):
+                # Busca Imagem
+                st.session_state.img_url = extrair_dados_produto(url_input)
+                # Gera Link e Texto
+                link_afiliado = criar_link_afiliado(url_input, loja)
+                texto = gerar_texto_ia(url_input, loja, info)
+                if texto:
+                    st.session_state.texto_final = texto.replace("[LINK]", link_afiliado)
+        else:
+            st.warning("Insira o link!")
 
-        # Inputs
-        url_input = st.text_input("Cole o link do produto aqui:", placeholder="https://www.amazon.com.br/...")
+    # Exibição do Resultado (Só aparece se houver texto gerado)
+    if st.session_state.texto_final:
+        st.divider()
+        if st.session_state.img_url:
+            st.image(st.session_state.img_url, width=300, caption="Imagem capturada automaticamente")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            loja_selecionada = st.selectbox("Selecione a Loja:", ["Amazon", "Magalu", "Shopee", "Outra"])
-        with col2:
-            usar_ia = st.toggle("Usar Inteligência Artificial", value=True)
+        post_editavel = st.text_area("Edite seu post:", value=st.session_state.texto_final, height=250)
 
-        info_adicional = st.text_area("Informações extras (Preço, Nome do produto ou detalhes):", 
-                                     placeholder="Ex: Galaxy S23 por R$ 2.999")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("📤 Enviar para Telegram"):
+                try:
+                    t = st.secrets["TELEGRAM_TOKEN"]
+                    c = st.secrets["TELEGRAM_CHAT_ID"]
+                    if st.session_state.img_url:
+                        # Envia FOTO + LEGENDA
+                        req = requests.post(f"https://api.telegram.org/bot{t}/sendPhoto", 
+                                          data={"chat_id": c, "photo": st.session_state.img_url, "caption": post_editavel, "parse_mode": "Markdown"})
+                    else:
+                        # Envia só TEXTO
+                        req = requests.post(f"https://api.telegram.org/bot{t}/sendMessage", 
+                                          data={"chat_id": c, "text": post_editavel, "parse_mode": "Markdown"})
+                    
+                    if req.status_code == 200: st.success("Postado!")
+                    else: st.error(f"Erro: {req.json().get('description')}")
+                except:
+                    st.error("Erro nos Secrets do Telegram.")
 
-        # Botão Processar
-        # --- NOVO CAMPO PARA IMAGEM ---
-        url_imagem = st.text_input("URL da Imagem do Produto (Clique com o botão direito na imagem da loja e 'Copiar endereço da imagem'):")
-
-        # Área de Edição e Envio
-        if "texto_final" in st.session_state:
-            st.divider()
-            st.subheader("📝 Resultado Final")
-            post_final = st.text_area("Texto formatado:", value=st.session_state.texto_final, height=250)
-            
-            col_post1, col_post2 = st.columns(2)
-            with col_post1:
-                if st.button("📤 Postar no Telegram"):
-                    try:
-                        token = st.secrets["TELEGRAM_TOKEN"]
-                        chat_id = st.secrets["TELEGRAM_CHAT_ID"]
-                        
-                        if url_imagem:
-                            # Envia Foto com Legenda (Aparência Profissional)
-                            url_api = f"https://api.telegram.org/bot{token}/sendPhoto"
-                            payload = {
-                                "chat_id": chat_id, 
-                                "photo": url_imagem,
-                                "caption": post_final, # O texto vira a legenda da foto
-                                "parse_mode": "HTML"    # Permite negrito e links
-                            }
-                        else:
-                            # Envia apenas texto se não houver imagem
-                            url_api = f"https://api.telegram.org/bot{token}/sendMessage"
-                            payload = {"chat_id": chat_id, "text": post_final, "parse_mode": "HTML"}
-                        
-                        response = requests.post(url_api, data=payload)
-                        if response.status_code == 200:
-                            st.success("✅ Oferta com foto enviada!")
-                        else:
-                            st.error(f"Erro: {response.json().get('description')}")
-                    except Exception as e:
-                        st.error("Erro técnico nos Secrets ou na URL da imagem.")
-            
-            with col_post2:
-                if st.button("💬 Abrir no WhatsApp"):
-                    # No WhatsApp, a melhor forma via web é gerar um link "api.whatsapp"
-                    # Isso abre o seu WhatsApp com o texto pronto para você escolher o grupo e enviar
-                    texto_url = urllib.parse.quote(post_final)
-                    link_wp = f"https://api.whatsapp.com/send?text={texto_url}"
-                    st.link_button("Confirmar Envio no WhatsApp", link_wp)
-if __name__ == "__main__":
-    main()
+        with c2:
+            texto_zap = urllib.parse.quote(post_editavel)
+            st.link_button("💬 WhatsApp", f"https://api.whatsapp.com/send?text={texto_zap}")
