@@ -1,6 +1,8 @@
 import streamlit as st
 import google.generativeai as genai
 import re
+import requests
+import urllib.parse 
 
 # --- CONFIGURAÇÕES INICIAIS ---
 st.set_page_config(page_title="Gerador de Ofertas IA", page_icon="💰")
@@ -28,7 +30,7 @@ def criar_link_afiliado(url_original, loja):
     """
     link = url_original.strip()
     if "Amazon" in loja:
-        tag = "seu_id_amazon-20" # Substitua pelo seu ID
+        tag = "wiltimato-20" # Substitua pelo seu ID
         return f"{link}&tag={tag}" if "?" in link else f"{link}?tag={tag}"
     
     elif "Magalu" in loja:
@@ -135,15 +137,28 @@ def main():
             col_post1, col_post2 = st.columns(2)
             with col_post1:
                 if st.button("📤 Postar no Telegram"):
-                    # Aqui você integraria com a API do bot de Telegram
-                    # Ex: requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": ID, "text": post_final})
-                    st.success("Enviado para o Telegram!")
+                    try:
+                        # Puxa as configurações dos Secrets do Streamlit
+                        token = st.secrets["8674080576:AAGZ2uVLASyKvnd51QpfYyhvMpzh6MLLgAI"]
+                        chat_id = st.secrets["@tomdaspromo"]
+                        
+                        url_api = f"https://api.telegram.org/bot{token}/sendMessage"
+                        payload = {"chat_id": chat_id, "text": post_final}
+                        
+                        response = requests.post(url_api, data=payload)
+                        if response.status_code == 200:
+                            st.success("✅ Enviado com sucesso para o Telegram!")
+                        else:
+                            st.error(f"Erro no Telegram: {response.text}")
+                    except Exception as e:
+                        st.error("Configure o TELEGRAM_TOKEN e TELEGRAM_CHAT_ID nos Secrets.")
             
             with col_post2:
-                if st.button("💬 Postar no WhatsApp"):
-                    # Como o WhatsApp Web é bloqueado em servidores, 
-                    # aqui geralmente usamos um link de API para abrir no celular de quem postou
-                    st.info("Função de API do WhatsApp em integração...")
-
+                if st.button("💬 Abrir no WhatsApp"):
+                    # No WhatsApp, a melhor forma via web é gerar um link "api.whatsapp"
+                    # Isso abre o seu WhatsApp com o texto pronto para você escolher o grupo e enviar
+                    texto_url = urllib.parse.quote(post_final)
+                    link_wp = f"https://api.whatsapp.com/send?text={texto_url}"
+                    st.link_button("Confirmar Envio no WhatsApp", link_wp)
 if __name__ == "__main__":
     main()
