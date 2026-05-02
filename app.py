@@ -66,9 +66,11 @@ else:
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
                     link_afiliado = url_input
+                    link_afiliado = url_input
                     if "Amazon" in loja_sel:
-                        link_afiliado = f"{url_input}?tag=wiltimato-20"
-                    
+                        tag = st.secrets.get("AMAZON_TAG", "wiltimato-20") # Puxa do Secret
+                        link_afiliado = f"{url_input}&tag={tag}" if "?" in url_input else f"{url_input}?tag={tag}"
+                                        
                     prompt = f"Crie um post de oferta curto para WhatsApp/Telegram. Produto: {url_input}. Detalhes: {detalhes}. Use emojis, negrito e termine com: 🛒 Compre aqui: {link_afiliado}"
                     
                     response = model.generate_content(prompt)
