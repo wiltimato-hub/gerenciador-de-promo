@@ -15,9 +15,9 @@ except:
 
 # --- BANCO DE DADOS DE USUÁRIOS ---
 USUARIOS = {
-    "admin": "senha123",
-    "amigo1": "festa456",
-    "amigo2": "oferta789"
+    "WilliamP": "William08112006!",
+    "WesleyB": "festa456",
+    "PedroA": "oferta789"
 }
 
 # --- FUNÇÕES DE LÓGICA ---
