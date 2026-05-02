@@ -17,7 +17,7 @@ except:
 
 # --- BANCO DE DADOS DE USUÁRIOS ---
 USUARIOS = {
-    "WilliamP": "William08112006!",
+    "WilliamP": "1",
     "WesleyB": "festa456",
     "PedroA": "oferta789"
 }
