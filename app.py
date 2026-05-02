@@ -50,8 +50,13 @@ def gerar_texto_ia(url, loja, texto_manual=""):
     Solicita à IA a criação de uma copy de vendas.
     """
     prompt = f"""
-    Você é um copywriter especialista em vendas rápidas para grupos de WhatsApp e Telegram.
-    Crie uma oferta curta e impactante para o produto abaixo.
+    Crie um post de oferta elegate:
+    1. Nome do produto em NEGRITO
+    2. Uma linha com o beneficio principal
+    3. Preço em destaque com emoji de dinheiro
+    4. link de compra claro
+    Evite parágrafos longos. Use listas (.)
+    
     
     Produto/Link: {url}
     Loja: {loja}
@@ -111,28 +116,14 @@ def main():
                                      placeholder="Ex: Galaxy S23 por R$ 2.999")
 
         # Botão Processar
-        if st.button("✨ Gerar Promoção"):
-            if not url_input:
-                st.warning("Por favor, insira o link do produto.")
-            else:
-                with st.spinner("Processando informações..."):
-                    link_final = criar_link_afiliado(url_input, loja_selecionada)
-                    
-                    if usar_ia:
-                        resultado = gerar_texto_ia(url_input, loja_selecionada, info_adicional)
-                        if resultado:
-                            st.session_state.texto_final = resultado.replace("[LINK]", link_final)
-                        else:
-                            st.error("IA fora do ar ou limite atingido. Use o modo manual.")
-                            st.session_state.texto_final = f"🔥 PROMOÇÃO!\n{info_adicional}\n\n🛒 Compre aqui: {link_final}"
-                    else:
-                        st.session_state.texto_final = f"🔥 PROMOÇÃO!\n{info_adicional}\n\n🛒 Compre aqui: {link_final}"
+        # --- NOVO CAMPO PARA IMAGEM ---
+        url_imagem = st.text_input("URL da Imagem do Produto (Clique com o botão direito na imagem da loja e 'Copiar endereço da imagem'):")
 
         # Área de Edição e Envio
         if "texto_final" in st.session_state:
             st.divider()
-            st.subheader("📝 Resultado Final (Pode editar)")
-            post_final = st.text_area("Texto formatado:", value=st.session_state.texto_final, height=300)
+            st.subheader("📝 Resultado Final")
+            post_final = st.text_area("Texto formatado:", value=st.session_state.texto_final, height=250)
             
             col_post1, col_post2 = st.columns(2)
             with col_post1:
@@ -141,16 +132,27 @@ def main():
                         token = st.secrets["TELEGRAM_TOKEN"]
                         chat_id = st.secrets["TELEGRAM_CHAT_ID"]
                         
-                        url_api = f"https://api.telegram.org/bot{token}/sendMessage"
-                        payload = {"chat_id": chat_id, "text": post_final}
+                        if url_imagem:
+                            # Envia Foto com Legenda (Aparência Profissional)
+                            url_api = f"https://api.telegram.org/bot{token}/sendPhoto"
+                            payload = {
+                                "chat_id": chat_id, 
+                                "photo": url_imagem,
+                                "caption": post_final, # O texto vira a legenda da foto
+                                "parse_mode": "HTML"    # Permite negrito e links
+                            }
+                        else:
+                            # Envia apenas texto se não houver imagem
+                            url_api = f"https://api.telegram.org/bot{token}/sendMessage"
+                            payload = {"chat_id": chat_id, "text": post_final, "parse_mode": "HTML"}
                         
                         response = requests.post(url_api, data=payload)
                         if response.status_code == 200:
-                            st.success("✅ Enviado com sucesso para o Telegram!")
+                            st.success("✅ Oferta com foto enviada!")
                         else:
                             st.error(f"Erro: {response.json().get('description')}")
                     except Exception as e:
-                        st.error("Erro técnico: Verifique se os Secrets estão preenchidos no Streamlit Cloud.")
+                        st.error("Erro técnico nos Secrets ou na URL da imagem.")
             
             with col_post2:
                 if st.button("💬 Abrir no WhatsApp"):
