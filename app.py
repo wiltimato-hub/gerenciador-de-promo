@@ -24,34 +24,31 @@ if not st.session_state.logado:
             st.rerun()
         else: st.error("Incorreto")
 else:
-    st.title("💰 Gerador de Ofertas Profissional")
+    st.title("💰 Gerador de Ofertas")
 
-    with st.container():
-        url_input = st.text_input("🔗 Link Original do Produto (Amazon/Magalu):")
-        loja_sel = st.selectbox("🏪 Loja:", ["Amazon", "Magalu", "Shopee", "Outra"])
-        detalhes = st.text_area("📝 Preço e detalhes (Ex: R$ 199 em 10x):")
-        img_manual = st.text_input("🖼️ URL da Imagem (Opcional):", placeholder="Cole aqui se a automática falhar")
+    url_input = st.text_input("🔗 Link Original do Produto:")
+    loja_sel = st.selectbox("🏪 Loja:", ["Amazon", "Magalu", "Shopee", "Outra"])
+    detalhes = st.text_area("📝 Preço e detalhes:")
+    img_manual = st.text_input("🖼️ URL da Imagem (Opcional):")
 
     if st.button("✨ GERAR PROMOÇÃO"):
         if not url_input:
             st.warning("Insira o link!")
         else:
             with st.spinner("Construindo oferta..."):
-                # 1. PROCESSAR LINK DE AFILIADO PRIMEIRO
+                # 1. LINK DE AFILIADO
                 tag_amazon = st.secrets.get("AMAZON_TAG", "wiltimato-20")
+                link_limpo = url_input.split("&tag=")[0].split("?tag=")[0]
+                separador = "&" if "?" in link_limpo else "?"
+                
                 if "Amazon" in loja_sel:
-                    # Garante que a tag vá no seu link
-                    separador = "&" if "?" in url_input else "?"
-                    # Remove tags de terceiros se existirem no link colado
-                    link_limpo = url_input.split("&tag=")[0].split("?tag=")[0]
                     link_final = f"{link_limpo}{separador}tag={tag_amazon}"
                 elif "Magalu" in loja_sel:
-                    # Exemplo para Magalu (ajuste conforme seu padrão)
-                    link_final = f"https://www.magazinevoce.com.br/magazinewiltimato/p/{url_input.split('/')[-1]}"
+                    link_final = f"https://www.magazinevoce.com.br/magazinewiltimato/p/{link_limpo.split('/')[-1]}"
                 else:
                     link_final = url_input
 
-                # 2. CAPTURAR IMAGEM (Usando o original apenas para busca)
+                # 2. CAPTURA DE IMAGEM
                 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                 try:
                     res = requests.get(url_input, headers=headers, timeout=10)
@@ -61,41 +58,41 @@ else:
                 except:
                     st.session_state.img_url = img_manual
 
-                # 3. GERAR TEXTO COM IA (Passando apenas o link de AFILIADO)
+                # 3. IA (AJUSTE DE SEGURANÇA)
                 try:
-                    genai.configure(api_key=st.secrets["GEMINI_KEY"])
+                    # Tenta pegar a chave do Secret
+                    api_key = st.secrets["GEMINI_KEY"].strip().replace('"', '')
+                    genai.configure(api_key=api_key)
+                    
+                    # Seleção do modelo mais recente e estável
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    # Forçamos a IA a usar APENAS o link_final
-                    prompt = f"""
-                    Você é um especialista em vendas. Crie um post para Telegram/WhatsApp.
-                    DETALHES DO PRODUTO: {detalhes}
-                    LINK DE COMPRA: {link_final}
+                    prompt = f"Crie um post de oferta curto. Produto: {detalhes}. Use emojis e negrito. Link de compra: {link_final}. NÃO use o link original."
                     
-                    REGRAS:
-                    - Use emojis e negrito no preço.
-                    - Use APENAS o LINK DE COMPRA fornecido acima. Nunca use o link original.
-                    - O link deve estar bem visível.
-                    """
                     response = model.generate_content(prompt)
-                    st.session_state.texto_gerado = response.text
-                    st.success("✅ Oferta Gerada com seu Link de Afiliado!")
-                except Exception as e:
-                    st.error(f"Erro na IA: {e}")
-                    st.session_state.texto_gerado = f"🔥 *OFERTA IMPERDÍVEL!*\n\n{detalhes}\n\n🛒 COMPRE AQUI: {link_final}"
+                    
+                    if response.text:
+                        st.session_state.texto_gerado = response.text
+                        st.success("✅ IA respondeu!")
+                    else:
+                        raise Exception("A IA retornou uma resposta vazia.")
 
-    # --- ÁREA DE ENVIO ---
+                except Exception as e:
+                    # Se a IA falhar, gera o texto manualmente para o seu link de afiliado funcionar
+                    st.session_state.texto_gerado = f"🔥 *OFERTA IMPERDÍVEL!*\n\n{detalhes}\n\n🛒 COMPRE AQUI: {link_final}"
+                    st.error(f"Erro na IA: {e}")
+
+    # --- EXIBIÇÃO E ENVIO ---
     if st.session_state.texto_gerado:
         st.divider()
         if st.session_state.img_url:
             st.image(st.session_state.img_url, width=300)
         
-        # Área para edição final
-        post_final = st.text_area("Texto Final (Confira seu link abaixo):", value=st.session_state.texto_gerado, height=250)
+        post_final = st.text_area("Texto Final:", value=st.session_state.texto_gerado, height=250)
 
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("📤 Postar no Telegram"):
+            if st.button("📤 Telegram"):
                 try:
                     t = st.secrets["TELEGRAM_TOKEN"]
                     c = st.secrets["TELEGRAM_CHAT_ID"]
@@ -105,9 +102,8 @@ else:
                     else:
                         requests.post(f"https://api.telegram.org/bot{t}/sendMessage", 
                                      data={"chat_id": c, "text": post_final, "parse_mode": "Markdown"})
-                    st.success("Enviado com sucesso!")
-                except: st.error("Erro ao enviar. Verifique se o Bot é ADM do Canal.")
+                    st.success("Postado!")
+                except: st.error("Erro no envio.")
         
         with c2:
-            texto_whatsapp = urllib.parse.quote(post_final)
-            st.link_button("💬 Abrir no WhatsApp", f"https://api.whatsapp.com/send?text={texto_whatsapp}")
+            st.link_button("💬 WhatsApp", f"https://api.whatsapp.com/send?text={urllib.parse.quote(post_final)}")
