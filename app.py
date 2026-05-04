@@ -55,8 +55,12 @@ else:
                 link_limpo = link_prod.split("?")[0].split("&")[0]
                 link_final = f"{link_limpo}?tag={tag}"
             elif "Magalu" in loja:
-                link_final = f"https://www.magazinevoce.com.br/magazinewiltimato/p/{link_prod.split('/')[-1]}"
-
+                # Extraímos o final do link original (ex: produto.html)
+                link_limpo = link_prod.split("?")[0].split("&")[0]
+                slug_produto = link_limpo.split("/")[-1]
+                # Montamos o link usando sua loja 'Locatech'
+                link_final = f"https://www.magazinevoce.com.br/magazinelocatech/p/{slug_produto}"
+                
             # 2. Encurtar o link gerado
             link_curto = encurtar_link(link_final)
 
