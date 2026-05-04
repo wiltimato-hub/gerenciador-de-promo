@@ -55,10 +55,18 @@ else:
                 link_limpo = link_prod.split("?")[0].split("&")[0]
                 link_final = f"{link_limpo}?tag={tag}"
             elif "Magalu" in loja:
-                # Extraímos o final do link original (ex: produto.html)
-                link_limpo = link_prod.split("?")[0].split("&")[0]
+                # 1. Limpa o link de lixos de rastreamento
+                link_limpo = link_prod.split("?")[0].split("#")[0]
+                
+                # 2. Pega o ID do produto (geralmente o que vem depois do último /)
+                # Remove a barra final se o usuário colou com ela
+                if link_limpo.endswith('/'):
+                    link_limpo = link_limpo[:-1]
+                
                 slug_produto = link_limpo.split("/")[-1]
-                # Montamos o link usando sua loja 'Locatech'
+                
+                # 3. Monta o link da sua loja Locatech
+                # O formato padrão do Magazine Você é /p/ no final
                 link_final = f"https://www.magazinevoce.com.br/magazinelocatech/p/{slug_produto}"
                 
             # 2. Encurtar o link gerado
