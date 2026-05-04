@@ -59,29 +59,36 @@ else:
                     st.session_state.img_url = img_manual
 
                 # 3. IA (AJUSTE DE SEGURANÇA)
+                # 3. IA - CONFIGURAÇÃO À PROVA DE ERROS
                 try:
-                    # Tenta pegar a chave do Secret
-                    api_key = st.secrets["GEMINI_KEY"].strip().replace('"', '')
+                    # Limpa a chave de qualquer espaço ou aspas extras
+                    api_key = st.secrets["GEMINI_KEY"].strip().replace('"', '').replace("'", "")
                     genai.configure(api_key=api_key)
                     
-                    # Seleção do modelo mais recente e estável
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    # Tente usar o nome técnico completo do modelo
+                    # Isso resolve o erro 404 na maioria das versões da biblioteca
+                    model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
                     
-                    prompt = f"Crie um post de oferta curto. Produto: {detalhes}. Use emojis e negrito. Link de compra: {link_final}. NÃO use o link original."
+                    prompt = f"Crie um post de oferta curto e atraente. Detalhes: {detalhes}. Use emojis. Link de compra: {link_final}."
                     
+                    # Adicionando um pequeno tratamento para a resposta
                     response = model.generate_content(prompt)
                     
-                    if response.text:
+                    if response:
                         st.session_state.texto_gerado = response.text
-                        st.success("✅ IA respondeu!")
-                    else:
-                        raise Exception("A IA retornou uma resposta vazia.")
-
+                        st.success("✅ IA conectada e texto gerado!")
+                
                 except Exception as e:
-                    # Se a IA falhar, gera o texto manualmente para o seu link de afiliado funcionar
-                    st.session_state.texto_gerado = f"🔥 *OFERTA IMPERDÍVEL!*\n\n{detalhes}\n\n🛒 COMPRE AQUI: {link_final}"
-                    st.error(f"Erro na IA: {e}")
-
+                    # Se o 404 persistir, tentamos o modelo alternativo (Pro)
+                    try:
+                        model = genai.GenerativeModel(model_name='models/gemini-1.5-pro')
+                        response = model.generate_content(prompt)
+                        st.session_state.texto_gerado = response.text
+                    except:
+                        # Fallback manual para o link de afiliado não deixar de ser postado
+                        st.session_state.texto_gerado = f"🔥 *PROMOÇÃO EXCLUSIVA*\n\n{detalhes}\n\n🛒 COMPRE AQUI: {link_final}"
+                        st.error(f"Erro técnico na IA: {e}. Geramos o texto padrão com seu link.")
+                        
     # --- EXIBIÇÃO E ENVIO ---
     if st.session_state.texto_gerado:
         st.divider()

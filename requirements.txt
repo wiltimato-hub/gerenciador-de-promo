@@ -1,6 +1,4 @@
 streamlit
-google-generativeai
+google-generativeai>=0.5.0
 requests
-python-dotenv
 beautifulsoup4
-lxml
