@@ -4,14 +4,23 @@ import requests
 from bs4 import BeautifulSoup
 import urllib.parse
 
-# --- 1. CONFIGURAÇÃO DE SEGURANÇA ---
+# --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="Gerador WilliamP", page_icon="💰")
 
-# Inicializa variáveis para evitar erro de "variável não definida"
 if "logado" not in st.session_state: st.session_state.logado = False
 if "texto_final" not in st.session_state: st.session_state.texto_final = ""
+if "img_url" not in st.session_state: st.session_state.img_url = ""
 
-# --- 2. LOGIN ---
+# --- FUNÇÃO ENCURTADORA (TinyURL) ---
+def encurtar_link(url_longa):
+    try:
+        api_url = f"http://tinyurl.com/api-create.php?url={url_longa}"
+        res = requests.get(api_url, timeout=5)
+        return res.text if res.status_code == 200 else url_longa
+    except:
+        return url_longa
+
+# --- LOGIN ---
 USUARIOS = {"WilliamP": "William08112006!", "WesleyB": "festa456"}
 
 if not st.session_state.logado:
@@ -24,17 +33,22 @@ if not st.session_state.logado:
             st.rerun()
         else: st.error("Incorreto")
 
-# --- 3. APP PRINCIPAL ---
 else:
-    st.title("🚀 Gerador de Ofertas")
+    st.title("🚀 Gerador de Ofertas Profissional")
 
-    link_prod = st.text_input("🔗 Link do Produto:")
-    loja = st.selectbox("🏪 Loja:", ["Amazon", "Magalu", "Shopee", "Outra"])
-    detalhes = st.text_area("📝 Detalhes (Preço/Nome):")
+    link_prod = st.text_input("🔗 Link Original do Produto:")
+    
+    col_loja, col_img = st.columns(2)
+    with col_loja:
+        loja = st.selectbox("🏪 Loja:", ["Amazon", "Magalu", "Shopee", "Outra"])
+    with col_img:
+        img_manual = st.text_input("🖼️ Link da Imagem (Manual):", placeholder="Opcional")
+        
+    detalhes = st.text_area("📝 Preço e Detalhes:")
 
-    if st.button("✨ GERAR"):
-        with st.spinner("Processando..."):
-            # Lógica de Afiliado
+    if st.button("✨ GERAR OFERTA ENCURTADA"):
+        with st.spinner("Encurtando link e gerando copy..."):
+            # 1. Gerar Link de Afiliado
             link_final = link_prod
             if "Amazon" in loja:
                 tag = st.secrets.get("AMAZON_TAG", "wiltimato-20")
@@ -43,35 +57,56 @@ else:
             elif "Magalu" in loja:
                 link_final = f"https://www.magazinevoce.com.br/magazinewiltimato/p/{link_prod.split('/')[-1]}"
 
-            # Tentativa de IA
+            # 2. Encurtar o link gerado
+            link_curto = encurtar_link(link_final)
+
+            # 3. Captura de Imagem
+            if img_manual:
+                st.session_state.img_url = img_manual
+            else:
+                try:
+                    res = requests.get(link_prod, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+                    soup = BeautifulSoup(res.text, 'html.parser')
+                    meta = soup.find("meta", property="og:image")
+                    st.session_state.img_url = meta["content"] if meta else ""
+                except:
+                    st.session_state.img_url = ""
+
+            # 4. Chamada da IA com o Link Curto
             try:
-                # O strip() remove espaços acidentais da chave
                 api_key = st.secrets["GEMINI_KEY"].strip().replace('"', '')
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 
-                response = model.generate_content(f"Crie uma oferta curta para: {detalhes}. Link: {link_final}")
+                prompt = f"Crie uma oferta curta. Detalhes: {detalhes}. Link de compra: {link_curto}. Use emojis."
+                response = model.generate_content(prompt)
                 st.session_state.texto_final = response.text
-            except Exception as e:
-                # Se a IA der erro, o app NÃO PARA. Ele gera o texto padrão.
-                st.session_state.texto_final = f"🔥 *OFERTA EXCLUSIVA*\n\n{detalhes}\n\n🛒 Compre aqui: {link_final}"
-                st.info(f"Aviso: IA offline (usando modo manual).")
+            except:
+                st.session_state.texto_final = f"🔥 *OFERTA EXCLUSIVA*\n\n{detalhes}\n\n🛒 Compre aqui: {link_curto}"
 
-    # Exibição do Resultado
+    # --- EXIBIÇÃO E ENVIO ---
     if st.session_state.texto_final:
         st.divider()
-        res = st.text_area("Texto Gerado:", value=st.session_state.texto_final, height=200)
+        if st.session_state.img_url:
+            st.image(st.session_state.img_url, width=300)
         
-        # WhatsApp Link
-        zap = f"https://api.whatsapp.com/send?text={urllib.parse.quote(res)}"
-        st.link_button("💬 Enviar para WhatsApp", zap)
+        res_editado = st.text_area("Texto com Link Curto:", value=st.session_state.texto_final, height=200)
         
-        # Telegram Bot (Opcional - só se os segredos existirem)
-        if st.button("📤 Enviar para Telegram"):
-            try:
-                t = st.secrets["TELEGRAM_TOKEN"]
-                c = st.secrets["TELEGRAM_CHAT_ID"]
-                requests.post(f"https://api.telegram.org/bot{t}/sendMessage", data={"chat_id": c, "text": res, "parse_mode": "Markdown"})
-                st.success("Enviado!")
-            except:
-                st.error("Erro no Telegram. Verifique os Secrets.")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("📤 Enviar Telegram"):
+                try:
+                    t = st.secrets["TELEGRAM_TOKEN"]
+                    c = st.secrets["TELEGRAM_CHAT_ID"]
+                    if st.session_state.img_url:
+                        requests.post(f"https://api.telegram.org/bot{t}/sendPhoto", 
+                                     data={"chat_id": c, "photo": st.session_state.img_url, "caption": res_editado, "parse_mode": "Markdown"})
+                    else:
+                        requests.post(f"https://api.telegram.org/bot{t}/sendMessage", 
+                                     data={"chat_id": c, "text": res_editado, "parse_mode": "Markdown"})
+                    st.success("Enviado!")
+                except: st.error("Erro no Telegram.")
+        
+        with c2:
+            zap_url = f"https://api.whatsapp.com/send?text={urllib.parse.quote(res_editado)}"
+            st.link_button("💬 WhatsApp", zap_url)
